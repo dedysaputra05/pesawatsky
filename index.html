@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SKY JET HUNTER</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Fredoka & Outfit for cute readable typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Outfit:wght@600;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Hands & Camera Utils CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        * {
+            font-family: 'Fredoka', cursive, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        
+        .math-font {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Canvas Fullscreen */
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        /* Custom Shadows & Text Stroke for Readability */
+        .text-stroke {
+            -webkit-text-stroke: 2px #1e293b;
+            paint-order: stroke fill;
+        }
+
+        .text-stroke-lg {
+            -webkit-text-stroke: 4px #0f172a;
+            paint-order: stroke fill;
+        }
+
+        .game-card {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(8px);
+            border: 4px solid #38bdf8;
+            box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Animations */
+        @keyframes bounce-gentle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .animate-bounce-gentle {
+            animation: bounce-gentle 2s infinite ease-in-out;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        .animate-pulse-ring {
+            animation: pulse-ring 1.5s infinite ease-in-out;
+        }
+
+        /* Colorful Gradient Text for Title */
+        .text-rainbow {
+            background: linear-gradient(135deg, #ff4b4b 0%, #ffb703 25%, #06d6a0 50%, #118ab2 75%, #9d4edd 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(3px 3px 0px #1e293b);
+        }
+    </style>
+</head>
+<body class="bg-sky-300 overflow-hidden w-screen h-screen m-0 p-0 select-none">
+
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI LAYER (Z-INDEX 10) -->
+    <div id="ui-layer" class="relative z-10 w-full h-full pointer-events-none flex flex-col justify-between p-4 md:p-6 box-border">
+
+        <!-- HEADER / TOP BAR -->
+        <div class="w-full flex flex-wrap justify-between items-center gap-2 pointer-events-auto">
+            
+            <!-- Left Info: Lives & Score -->
+            <div class="flex items-center gap-3">
+                <!-- Hearts / Lives -->
+                <div class="game-card rounded-2xl px-4 py-2 flex items-center gap-1.5 border-red-400">
+                    <span class="text-sm font-bold text-gray-500 mr-1">NYAWA:</span>
+                    <div id="lives-container" class="flex gap-1 text-2xl text-red-500 drop-shadow">
+                        <i class="fa-solid fa-heart"></i>
+                        <i class="fa-solid fa-heart"></i>
+                        <i class="fa-solid fa-heart"></i>
+                    </div>
+                </div>
+
+                <!-- Score & Level -->
+                <div class="game-card rounded-2xl px-4 py-2 flex items-center gap-3 border-amber-400">
+                    <div>
+                        <div class="text-xs font-bold text-gray-400 leading-none">SKOR</div>
+                        <div id="score-text" class="text-2xl font-black text-amber-500 math-font leading-none">0</div>
+                    </div>
+                    <div class="w-px h-7 bg-gray-200"></div>
+                    <div>
+                        <div class="text-xs font-bold text-gray-400 leading-none">LEVEL</div>
+                        <div id="level-text" class="text-xl font-bold text-indigo-600 leading-none">1</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Math Question Display (Center Top) -->
+            <div id="question-card" class="game-card rounded-3xl px-8 py-3 bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-300 border-amber-400 shadow-xl animate-bounce-gentle mx-auto md:mx-0">
+                <div class="text-xs text-amber-800 font-extrabold uppercase tracking-widest text-center mb-0.5">SOAL MATEMATIKA</div>
+                <div id="math-question" class="text-3xl md:text-5xl font-black text-amber-950 math-font text-center text-stroke tracking-wider">
+                    4 × 5 = ?
+                </div>
+            </div>
+
+            <!-- Right Controls: Audio & Pause & Control Mode -->
+            <div class="flex items-center gap-2">
+                <!-- Audio Toggle -->
+                <button id="btn-toggle-audio" class="game-card rounded-2xl w-12 h-12 bg-white hover:bg-sky-50 text-amber-500 flex items-center justify-center text-xl transition transform active:scale-95 shadow">
+                    <i id="audio-icon" class="fa-solid fa-volume-high"></i>
+                </button>
+
+                <!-- Pause Button -->
+                <button id="btn-pause" class="game-card rounded-2xl w-12 h-12 bg-white hover:bg-sky-50 text-indigo-600 flex items-center justify-center text-xl transition transform active:scale-95 shadow">
+                    <i class="fa-solid fa-pause"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- CAMERA WEBCAM PIP OVERLAY (BOTTOM LEFT) -->
+        <div id="webcam-container" class="pointer-events-auto absolute bottom-4 left-4 game-card rounded-2xl p-1.5 border-indigo-400 shadow-2xl transition-all duration-300 w-36 h-28 sm:w-44 sm:h-32 flex flex-col items-center justify-center bg-slate-900 overflow-hidden">
+            <video id="webcam-video" class="w-full h-full object-cover rounded-xl -scale-x-100" playsinline></video>
+            <canvas id="webcam-canvas" class="absolute inset-0 w-full h-full object-cover rounded-xl -scale-x-100 pointer-events-none"></canvas>
+            
+            <div id="webcam-status" class="absolute inset-0 bg-slate-900/80 flex flex-col items-center justify-center text-white p-2 text-center">
+                <i class="fa-solid fa-camera text-2xl text-sky-400 mb-1 animate-pulse"></i>
+                <span class="text-[10px] font-semibold">Mengaktifkan Tangan...</span>
+            </div>
+            
+            <!-- PIP Badge -->
+            <div class="absolute top-2 left-2 bg-indigo-600/90 text-white text-[9px] font-bold px-2 py-0.5 rounded-full backdrop-blur">
+                <i class="fa-solid fa-hand mr-1"></i> KONTROL TANGAN
+            </div>
+        </div>
+
+        <!-- SCREEN TOUCH CONTROLS (ONLY ACTIVE IF MANUAL MODE ON MOBILE/TOUCH) -->
+        <div id="touch-controls" class="hidden pointer-events-auto absolute bottom-6 right-6 flex flex-col gap-2">
+            <div class="text-center text-xs font-bold text-sky-800 bg-white/70 backdrop-blur px-2 py-1 rounded-md mb-1">Gunakan Sentuhan / Geser Pesawat</div>
+        </div>
+    </div>
+
+    <!-- OVERLAY: START MENU SCREEN -->
+    <div id="start-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-sky-400/90 backdrop-blur-md p-4">
+        <div class="game-card rounded-3xl p-6 sm:p-10 max-w-lg w-full text-center border-sky-400 shadow-2xl relative overflow-hidden bg-gradient-to-b from-white to-sky-50">
+            
+            <!-- Cute Header Badge -->
+            <div class="inline-block bg-amber-400 text-amber-950 font-black text-xs px-4 py-1.5 rounded-full uppercase tracking-widest mb-3 shadow-sm">
+                Matematika Kelas 3 SD
+            </div>
+
+            <!-- Title changed to colorful SKY JET HUNTER -->
+            <h1 class="text-4xl sm:text-6xl font-black mb-2 leading-tight tracking-wider text-rainbow">
+                SKY JET HUNTER
+            </h1>
+            <p class="text-gray-600 font-semibold mb-6 text-sm sm:text-base">
+                Terbangkan pesawat menggunakan gestur tanganmu, hitung soal perkalian & pembagian, lalu lewati gerbang jawaban yang benar!
+            </p>
+
+            <!-- Instructions Brief -->
+            <div class="bg-sky-100/80 rounded-2xl p-4 mb-6 text-left border border-sky-200">
+                <div class="font-bold text-sky-900 text-sm mb-1 flex items-center gap-2">
+                    <i class="fa-solid fa-lightbulb text-amber-500"></i> Cara Bermain:
+                </div>
+                <ul class="text-xs sm:text-sm text-sky-800 space-y-1 list-disc list-inside">
+                    <li>Izinkan akses kamera webcam.</li>
+                    <li>Gerakkan telapak tanganmu ke kiri, kanan, atas, dan bawah untuk mengarahkan pesawat.</li>
+                    <li>Tabrak cincin dengan jawaban matematika yang tepat!</li>
+                </ul>
+            </div>
+
+            <!-- Start Play Button -->
+            <button id="btn-start-game" class="w-full py-4 px-8 bg-gradient-to-r from-emerald-400 to-green-500 hover:from-emerald-500 hover:to-green-600 text-white font-black text-xl sm:text-2xl rounded-2xl shadow-lg hover:shadow-xl transform hover:-translate-y-1 active:translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-3 border-b-4 border-green-700 pointer-events-auto">
+                <i class="fa-solid fa-play text-2xl"></i>
+                <span>MULAI BERMAIN!</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- OVERLAY: PAUSE SCREEN -->
+    <div id="pause-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md p-4">
+        <div class="game-card rounded-3xl p-8 max-w-sm w-full text-center border-indigo-400">
+            <h2 class="text-3xl font-black text-indigo-900 mb-4">PERMAINAN DIPAUS</h2>
+            <div class="flex flex-col gap-3">
+                <button id="btn-resume" class="w-full py-3 bg-emerald-500 text-white font-bold rounded-xl text-lg hover:bg-emerald-600 transition shadow">
+                    LANJUTKAN
+                </button>
+                <button id="btn-restart" class="w-full py-3 bg-amber-500 text-white font-bold rounded-xl text-lg hover:bg-amber-600 transition shadow">
+                    ULANGI GAME
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- OVERLAY: GAME OVER SCREEN -->
+    <div id="gameover-screen" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-red-950/80 backdrop-blur-md p-4">
+        <div class="game-card rounded-3xl p-8 max-w-md w-full text-center border-red-400">
+            <div class="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-4xl mx-auto mb-4 border-4 border-red-300">
+                <i class="fa-solid fa-plane-slash"></i>
+            </div>
+            <h2 class="text-4xl font-black text-red-600 mb-2">GAME OVER</h2>
+            <p class="text-gray-600 font-semibold mb-4">Jangan menyerah! Ayo coba lagi dan hitung dengan teliti.</p>
+            <div class="bg-gray-100 rounded-2xl p-4 mb-6">
+                <div class="text-sm font-bold text-gray-500">SKOR AKHIR</div>
+                <div id="final-score" class="text-4xl font-black text-amber-500 math-font">0</div>
+            </div>
+            <button id="btn-restart-gameover" class="w-full py-4 bg-gradient-to-r from-emerald-400 to-green-500 text-white font-black text-xl rounded-2xl shadow-lg hover:from-emerald-500 hover:to-green-600 transition transform active:scale-95">
+                MAIN LAGI
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME LOGIC SCRIPT -->
+    <script>
+        // Game State Variables
+        let isGameRunning = false;
+        let isPaused = false;
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let currentQuestion = { text: '', answer: 0, options: [] };
+
+        // DOM Elements
+        const startScreen = document.getElementById('start-screen');
+        const btnStartGame = document.getElementById('btn-start-game');
+        const pauseScreen = document.getElementById('pause-screen');
+        const gameoverScreen = document.getElementById('gameover-screen');
+        const btnPause = document.getElementById('btn-pause');
+        const btnResume = document.getElementById('btn-resume');
+        const btnRestart = document.getElementById('btn-restart');
+        const btnRestartGameover = document.getElementById('btn-restart-gameover');
+        const mathQuestionEl = document.getElementById('math-question');
+        const scoreTextEl = document.getElementById('score-text');
+        const levelTextEl = document.getElementById('level-text');
+        const livesContainer = document.getElementById('lives-container');
+        const finalScoreEl = document.getElementById('final-score');
+        const btnToggleAudio = document.getElementById('btn-toggle-audio');
+        const audioIcon = document.getElementById('audio-icon');
+
+        // Audio Synth Setup (Web Audio API)
+        let audioEnabled = true;
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioEnabled || !audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+            if (type === 'correct') {
+                osc.frequency.setValueAtTime(523.25, now); // C5
+                osc.frequency.exponentialRampToValueAtTime(659.25, now + 0.15); // E5
+                osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.3); // G5
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(110, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            }
+        }
+
+        // Three.js 3D Setup
+        const canvas = document.getElementById('game-canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x7dd3fc); // Sky Blue
+        scene.fog = new THREE.FogExp2(0x7dd3fc, 0.008);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 3, 10);
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+        // Lights
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        scene.add(dirLight);
+
+        // Jet Plane Mesh Construction
+        const jetGroup = new THREE.Group();
+        scene.add(jetGroup);
+
+        // Plane Body
+        const bodyGeo = new THREE.ConeGeometry(0.7, 3, 8);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0xef4444 });
+        const body = new THREE.Mesh(bodyGeo, bodyMat);
+        body.rotation.x = Math.PI / 2;
+        jetGroup.add(body);
+
+        // Wings
+        const wingGeo = new THREE.BoxGeometry(3.5, 0.1, 0.8);
+        const wingMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b });
+        const wings = new THREE.Mesh(wingGeo, wingMat);
+        wings.position.set(0, 0, 0.2);
+        jetGroup.add(wings);
+
+        // Tail
+        const tailGeo = new THREE.BoxGeometry(0.1, 1, 0.6);
+        const tail = new THREE.Mesh(tailGeo, wingMat);
+        tail.position.set(0, 0.6, -1);
+        jetGroup.add(tail);
+
+        // Clouds background environment
+        const clouds = [];
+        const cloudGeo = new THREE.DodecahedronGeometry(2, 1);
+        const cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+        
+        for (let i = 0; i < 25; i++) {
+            const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+            cloud.position.set(
+                (Math.random() - 0.5) * 100,
+                (Math.random() - 0.5) * 30 + 5,
+                -Math.random() * 200
+            );
+            scene.add(cloud);
+            clouds.push(cloud);
+        }
+
+        // Target Plane Position & Control Variables
+        let targetX = 0;
+        let targetY = 0;
+        const planeBounds = { x: 7, y: 4.5 };
+
+        // Math Ring Targets Group
+        const ringsGroup = new THREE.Group();
+        scene.add(ringsGroup);
+        let activeRings = [];
+
+        function generateMathQuestion() {
+            const isMultiplication = Math.random() > 0.4;
+            let a, b, qText, ans;
+
+            if (isMultiplication) {
+                a = Math.floor(Math.random() * 8) + 2; // 2 to 9
+                b = Math.floor(Math.random() * 8) + 2; // 2 to 9
+                qText = `${a} × ${b} = ?`;
+                ans = a * b;
+            } else {
+                b = Math.floor(Math.random() * 7) + 2; // 2 to 8 divisor
+                ans = Math.floor(Math.random() * 8) + 2; // quotient
+                a = b * ans;
+                qText = `${a} ÷ ${b} = ?`;
+            }
+
+            // Options generation
+            const options = [ans];
+            while (options.length < 3) {
+                let offset = (Math.floor(Math.random() * 5) + 1) * (Math.random() > 0.5 ? 1 : -1);
+                let fakeAns = ans + offset;
+                if (fakeAns > 0 && !options.includes(fakeAns)) {
+                    options.push(fakeAns);
+                }
+            }
+
+            // Shuffle options
+            options.sort(() => Math.random() - 0.5);
+
+            currentQuestion = { text: qText, answer: ans, options: options };
+            mathQuestionEl.textContent = qText;
+
+            spawnRings(options);
+        }
+
+        // Canvas Text Texture Helper
+        function createTextCanvasTexture(text) {
+            const canvasText = document.createElement('canvas');
+            canvasText.width = 256;
+            canvasText.height = 256;
+            const ctx = canvasText.getContext('2d');
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(128, 128, 110, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.lineWidth = 12;
+            ctx.strokeStyle = '#0284c7';
+            ctx.stroke();
+
+            ctx.font = 'bold 90px Outfit, sans-serif';
+            ctx.fillStyle = '#0f172a';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 128, 128);
+
+            return new THREE.CanvasTexture(canvasText);
+        }
+
+        function spawnRings(options) {
+            // Clear existing rings
+            activeRings.forEach(r => ringsGroup.remove(r.mesh));
+            activeRings = [];
+
+            const positionsX = [-4.5, 0, 4.5];
+            const ringGeo = new THREE.TorusGeometry(1.4, 0.25, 16, 32);
+
+            options.forEach((val, idx) => {
+                const isCorrect = val === currentQuestion.answer;
+                const ringMat = new THREE.MeshStandardMaterial({
+                    color: 0x38bdf8,
+                    roughness: 0.3
+                });
+                const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+
+                // Add text board inside ring
+                const textTex = createTextCanvasTexture(val.toString());
+                const boardGeo = new THREE.PlaneGeometry(2, 2);
+                const boardMat = new THREE.MeshBasicMaterial({ map: textTex, transparent: true });
+                const boardMesh = new THREE.Mesh(boardGeo, boardMat);
+                ringMesh.add(boardMesh);
+
+                ringMesh.position.set(positionsX[idx], 0, -60);
+                ringsGroup.add(ringMesh);
+
+                activeRings.push({
+                    mesh: ringMesh,
+                    val: val,
+                    isCorrect: isCorrect
+                });
+            });
+        }
+
+        // Update Plane Position Smoothly
+        function updateGame(delta) {
+            if (!isGameRunning || isPaused) return;
+
+            // Move plane toward targets
+            jetGroup.position.x += (targetX - jetGroup.position.x) * 0.1;
+            jetGroup.position.y += (targetY - jetGroup.position.y) * 0.1;
+
+            // Tilt plane based on movement
+            jetGroup.rotation.z = (targetX - jetGroup.position.x) * -0.2;
+            jetGroup.rotation.x = (targetY - jetGroup.position.y) * 0.2;
+
+            // Move clouds
+            clouds.forEach(c => {
+                c.position.z += 0.8;
+                if (c.position.z > 15) {
+                    c.position.z = -180;
+                    c.position.x = (Math.random() - 0.5) * 100;
+                }
+            });
+
+            // Move rings toward plane
+            activeRings.forEach(r => {
+                r.mesh.position.z += 0.45 + (level * 0.05);
+                r.mesh.rotation.z += 0.01;
+
+                // Collision Detection with Plane
+                if (Math.abs(r.mesh.position.z - jetGroup.position.z) < 1.5) {
+                    const dist = Math.hypot(
+                        r.mesh.position.x - jetGroup.position.x,
+                        r.mesh.position.y - jetGroup.position.y
+                    );
+
+                    if (dist < 1.8) {
+                        if (r.isCorrect) {
+                            playSound('correct');
+                            score += 10;
+                            scoreTextEl.textContent = score;
+                            if (score % 30 === 0) {
+                                level++;
+                                levelTextEl.textContent = level;
+                            }
+                        } else {
+                            playSound('wrong');
+                            lives--;
+                            updateLivesDisplay();
+                            if (lives <= 0) {
+                                triggerGameOver();
+                                return;
+                            }
+                        }
+                        generateMathQuestion();
+                    }
+                }
+            });
+
+            // If rings passed without hit
+            if (activeRings.length > 0 && activeRings[0].mesh.position.z > 10) {
+                generateMathQuestion();
+            }
+        }
+
+        function updateLivesDisplay() {
+            livesContainer.innerHTML = '';
+            for (let i = 0; i < 3; i++) {
+                const heart = document.createElement('i');
+                heart.className = i < lives ? 'fa-solid fa-heart text-red-500' : 'fa-regular fa-heart text-gray-400';
+                livesContainer.appendChild(heart);
+            }
+        }
+
+        function triggerGameOver() {
+            isGameRunning = false;
+            finalScoreEl.textContent = score;
+            gameoverScreen.classList.remove('hidden');
+        }
+
+        function resetGame() {
+            score = 0;
+            lives = 3;
+            level = 1;
+            scoreTextEl.textContent = score;
+            levelTextEl.textContent = level;
+            updateLivesDisplay();
+            gameoverScreen.classList.add('hidden');
+            pauseScreen.classList.add('hidden');
+            generateMathQuestion();
+            isGameRunning = true;
+            isPaused = false;
+        }
+
+        // MediaPipe Hands Integration
+        const videoElement = document.getElementById('webcam-video');
+        const webcamStatus = document.getElementById('webcam-status');
+
+        function onResults(results) {
+            webcamStatus.classList.add('hidden');
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                // Index finger tip (Landmark 8) or Wrist (0)
+                const handX = landmarks[9].x; // 0 to 1
+                const handY = landmarks[9].y; // 0 to 1
+
+                // Map to 3D world plane bounds
+                targetX = -(handX - 0.5) * (planeBounds.x * 2);
+                targetY = -(handY - 0.5) * (planeBounds.y * 2);
+            }
+        }
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
+        hands.onResults(onResults);
+
+        let cameraUtils = null;
+
+        function startCamera() {
+            cameraUtils = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({ image: videoElement });
+                },
+                width: 320,
+                height: 240
+            });
+            cameraUtils.start().catch(err => {
+                console.warn('Webcam not permitted/available:', err);
+                webcamStatus.innerHTML = '<span class="text-xs text-amber-300">Gunakan Mouse / Touch Screen</span>';
+            });
+        }
+
+        // Mouse Fallback for Navigation
+        window.addEventListener('mousemove', (e) => {
+            if (isGameRunning) {
+                const normX = (e.clientX / window.innerWidth) - 0.5;
+                const normY = (e.clientY / window.innerHeight) - 0.5;
+                targetX = normX * (planeBounds.x * 2);
+                targetY = -normY * (planeBounds.y * 2);
+            }
+        });
+
+        // Touch Fallback for Mobile
+        window.addEventListener('touchmove', (e) => {
+            if (isGameRunning && e.touches.length > 0) {
+                const touch = e.touches[0];
+                const normX = (touch.clientX / window.innerWidth) - 0.5;
+                const normY = (touch.clientY / window.innerHeight) - 0.5;
+                targetX = normX * (planeBounds.x * 2);
+                targetY = -normY * (planeBounds.y * 2);
+            }
+        });
+
+        // Event Listeners for UI Buttons
+        btnStartGame.addEventListener('click', () => {
+            initAudio();
+            startScreen.classList.add('hidden');
+            startCamera();
+            resetGame();
+        });
+
+        btnPause.addEventListener('click', () => {
+            isPaused = true;
+            pauseScreen.classList.remove('hidden');
+        });
+
+        btnResume.addEventListener('click', () => {
+            isPaused = false;
+            pauseScreen.classList.add('hidden');
+        });
+
+        btnRestart.addEventListener('click', () => {
+            resetGame();
+        });
+
+        btnRestartGameover.addEventListener('click', () => {
+            resetGame();
+        });
+
+        btnToggleAudio.addEventListener('click', () => {
+            audioEnabled = !audioEnabled;
+            audioIcon.className = audioEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-gray-400';
+        });
+
+        // Handle Window Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Main Animation Loop
+        let lastTime = 0;
+        function animate(currentTime) {
+            requestAnimationFrame(animate);
+            const delta = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            updateGame(delta);
+            renderer.render(scene, camera);
+        }
+
+        // Start Loop on Window Load
+        window.onload = () => {
+            animate(0);
+        };
+    </script>
+</body>
+</html>
